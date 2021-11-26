@@ -16,8 +16,7 @@ URL_REGEX = re.compile(
     "((http|https)://)(www.)?[a-zA-Z0-9@:%._\\+~#?&//=]{2,256}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%._\\+~#?&//=]*)")
 nltk.download('stopwords')
 tknzr = TweetTokenizer()
-stopwords_set = set(stopwords.words("english")).union(
-    set(stopwords.words("custom")))
+stopwords_set = set(stopwords.words("english"))
 
 
 def tokenizeStr(docString: str) -> [str]:
@@ -97,14 +96,9 @@ def getQueries(path: str) -> [Query]:
     for query in queryTree.getroot():
         qNum = int(qNumRe.search(query[0].text).group(0))
         qTokens = tokenizeStr(query[1].text)
-        expandQuery(qTokens)
         ret.append(
             Query(qNum, qTokens))
     return ret
-
-
-def expandQuery(tokens: [str]) -> None:
-    pass
 
 
 def saveToFile(results: [{str: float}], path: str) -> None:
