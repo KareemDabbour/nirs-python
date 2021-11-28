@@ -1,8 +1,7 @@
 import re
 import string
+import time
 from typing import Dict, List
-from document import Document
-from query import Query
 from index import Index
 import pandas as pd
 from math import log, sqrt
@@ -30,30 +29,30 @@ def processStopWords(path):
     return set(ret)
 
 
-#
 stopwords_set = set(stopwords.words("english")).union(
     processStopWords("./resources/StopWords.txt"))
+
+# stopwords_set = set(processStopWords("./resources/StopWords.txt"))
 
 
 def tokenizeStr(docString: str) -> List[str]:
     #preprocStr(docString).split(" ")
-    return [word.strip() for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and word.strip()]
+    return [word for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and word.strip()]
 
 
 def preprocStr(docString: str) -> str:
 
     # making all lower case
-    docString = docString.lower()
-    docString = docString.strip()
+    docString = docString.lower().strip()
     docString = URL_REGEX.sub('', docString)
-    docString = docString.translate(str.maketrans('/', ' '))
-    # Removing puncuation '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
-    docString = docString.translate(str.maketrans('', '', string.punctuation))
-    docString = docString.translate(str.maketrans('', '', string.digits))
+    docString = docString \
+        .translate(str.maketrans('/', ' ')) \
+        .translate(str.maketrans(' ', ' ', string.punctuation)) \
+        .translate(str.maketrans('', '', string.digits))
     return docString
 
 
-def vectorizeDocs(docs: Dict[str: List[str]]) -> List[Dict[str: float]]:
+def vectorizeDocs(docs: Dict[str, List[str]]) -> Dict[str, float]:
     ret = {}
     for docId, tokens in docs.items():
         docLen: float = 0.0
@@ -65,7 +64,7 @@ def vectorizeDocs(docs: Dict[str: List[str]]) -> List[Dict[str: float]]:
     return ret
 
 
-def makeQuery(queryTokens: List[str], index: Index, docVecLens: Dict[str: float]) -> Dict[str: float]:
+def makeQuery(queryTokens: List[str], index: Index, docVecLens: Dict[str, float]) -> Dict[str, float]:
     docRankMap = {}
     queryVecLen = 0.0
     maxFreq = getMaxFreq(queryTokens)
@@ -87,19 +86,19 @@ def getMaxFreq(tokens):
     return tokens.count(max(set(tokens), key=tokens.count))
 
 
-def bulkQuery(queries: Dict[int: List[str]], index: Index, docVecLens: Dict[str: float]) -> List[Dict[str: float]]:
+def bulkQuery(queries: Dict[int, List[str]], index: Index, docVecLens: Dict[str, float]) -> List[Dict[str, float]]:
     ret = []
     for query in queries.values():
         ret.append(makeQuery(query, index, docVecLens))
     return ret
 
 
-def normalize(docRankMap: Dict[str: float], docVecLens: Dict[str: float], queryVecLen: float) -> None:
+def normalize(docRankMap: Dict[str, float], docVecLens: Dict[str, float], queryVecLen: float) -> None:
     for key in docRankMap:
         docRankMap[key] /= (queryVecLen * docVecLens[key])
 
 
-def getDocs(path: str) -> Dict[str: str]:
+def getDocs(path: str) -> Dict[str, str]:
     docs = {}
     with open(path) as file:
         for line in file:
@@ -110,7 +109,7 @@ def getDocs(path: str) -> Dict[str: str]:
     return docs
 
 
-def tokenizeDocs(docsDict: Dict[str: str]) -> Dict[str: List[str]]:
+def tokenizeDocs(docsDict: Dict[str, str]) -> Dict[str, List[str]]:
     ret = {}
     for docId, text in docsDict.items():
         ret[docId] = tokenizeStr(text)
@@ -130,7 +129,7 @@ def getDocsPd(path: str):
     return pd.DataFrame({"docId": docIds, "text": docs})
 
 
-def getQueries(path: str) -> Dict[str: str]:
+def getQueries(path: str) -> Dict[str, str]:
     ret = {}
 
     queryTree = ElementTree.parse(path)
@@ -142,7 +141,7 @@ def getQueries(path: str) -> Dict[str: str]:
     return ret
 
 
-def tokenizeQueries(queries: Dict[str: str]):
+def tokenizeQueries(queries: Dict[str, str]):
     ret = {}
     for qId, text in queries.items():
         ret[qId] = tokenizeStr(text)
@@ -182,13 +181,30 @@ def reRank(results, docs, queries):
     return ret
 
 
-def queryExpand(queries):
+def queryExpand(queries: Dict[str, List[str]]):
+    threshold = 0.635
+    mult = 1
+    start = time.perf_counter()
+    print(f"Starting to load model")
     model = api.load("glove-twitter-200")
-    for qNum, qText in queries:
-        pass
+    print(type(model))
+    print(f"Time to load model: {time.perf_counter() - start}")
+    for qText in list(queries.values()):  # [:3]:
+        sim = []
+
+        for text in set(qText):
+            # print(f"Similar words to {text}: {model.most_similar(text)}")
+            if not model.has_index_for(text):
+                continue
+
+            simList = [word for (word, val) in model.most_similar(
+                text, topn=mult) if val > threshold]
+            sim.extend(tokenizeStr(" ".join(simList)))
+
+        qText.extend(sim)
 
 
-def saveToFile(results: List[Dict[str: float]], path: str) -> None:
+def saveToFile(results: List[Dict[str, float]], path: str) -> None:
     with open(path, 'w') as f:
         for i, result in enumerate(results):
             for rank, (key, value) in enumerate(result.items()):

@@ -1,6 +1,6 @@
 # pylint: disable-msg=E0611
 from math import log
-from document import Document
+from typing import List, Dict
 
 
 class Index:
@@ -8,16 +8,16 @@ class Index:
         self.index = {}
         self.numDocs = 0
 
-    def indexDoc(self, docId: str, docText: [str]) -> None:
+    def indexDoc(self, docId: str, docText: List[str]) -> None:
         for uToken in set(docText):
             tf = docText.count(uToken)
-            entry = (docId, 1 + log(tf) if tf > 0 else 0)
+            entry = (docId, 1 + log(tf) if tf else 0)
             if (not self.index.get(uToken)):
                 self.index[uToken] = []
             self.index[uToken].append(entry)
         self.numDocs += 1
 
-    def bulkIndex(self, docs: {str: [str]}) -> None:
+    def bulkIndex(self, docs: Dict[str, List[str]]) -> None:
         for docId, tokens in docs.items():
             self.indexDoc(docId, tokens)
 
@@ -27,8 +27,8 @@ class Index:
             ret = len(self.index[term])
         return ret
 
-    def get(self, term: str) -> [(str, float)]:
-        return self.index[term]
+    def get(self, term: str):
+        return self.index[term] if self.index.get(term) else []
 
     def getIDF(self, term: str) -> float:
         ret = 0.0

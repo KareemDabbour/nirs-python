@@ -1,7 +1,5 @@
 from utils import *
 from index import Index
-from document import Document
-from query import Query
 from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
 
@@ -11,7 +9,7 @@ def main():
     QUERY_PATH = "./resources/topics_MB1-49.txt"
     RESULT_PATH = "./results/Results.txt"
     STOP_WORD_PATH = "./resources/StopWords.txt"
-
+    start = time.perf_counter()
     index = Index()
     regDocs = getDocs(DOC_PATH)
     docs = tokenizeDocs(regDocs)
@@ -37,12 +35,16 @@ def main():
     regQueries = getQueries(QUERY_PATH)
 
     queries = tokenizeQueries(regQueries)
+    # print(list(queries.values())[:3])
+    queryExpand(queries)
+    # print(list(queries.values())[:3])
 
     results = bulkQuery(queries, index, docVecLens)
 
     # reRank(results, regDocs, regQueries)  # regDocs, regQueries)
 
     saveToFile(results, RESULT_PATH)
+    print(f"Time to finish entire thing: {time.perf_counter() - start}")
 
 
 if __name__ == '__main__':
