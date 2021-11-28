@@ -3,6 +3,7 @@ import string
 from document import Document
 from query import Query
 from index import Index
+import pandas as pd
 # pylint: disable-msg=E0611
 from math import log, sqrt
 import nltk
@@ -10,17 +11,33 @@ from nltk.corpus import stopwords
 from nltk.tokenize import TweetTokenizer
 from nltk.stem.snowball import EnglishStemmer
 from xml.etree import ElementTree
+from scipy import spatial
+from sent2vec.vectorizer import Vectorizer
+import gensim.downloader as api
 
 
 URL_REGEX = re.compile(
     "((http|https)://)(www.)?[a-zA-Z0-9@:%._\\+~#?&//=]{2,256}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%._\\+~#?&//=]*)")
 nltk.download('stopwords')
 tknzr = TweetTokenizer()
-stopwords_set = set(stopwords.words("english"))
+
+
+def processStopWords(path):
+    ret = []
+    with open(path) as f:
+        for line in f:
+            ret.append(line)
+    return set(ret)
+
+
+#
+stopwords_set = set(stopwords.words("english")).union(
+    processStopWords("./resources/StopWords.txt"))
 
 
 def tokenizeStr(docString: str) -> [str]:
-    return [word.strip() for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and len(word.strip()) > 2]
+    #preprocStr(docString).split(" ")
+    return [word.strip() for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and word.strip()]
 
 
 def preprocStr(docString: str) -> str:
@@ -36,24 +53,25 @@ def preprocStr(docString: str) -> str:
     return docString
 
 
-def vectorizeDocs(docs: [Document]) -> {str, float}:
+def vectorizeDocs(docs: {str: [str]}) -> {str: float}:
     ret = {}
-    for doc in docs:
+    for docId, tokens in docs.items():
         docLen: float = 0.0
-        for term in doc.uniqueTokens:
-            termFreq = doc.tokens.count(term)
+        for term in set(tokens):
+            termFreq = tokens.count(term)
             wTf = 1 + log(termFreq)
             docLen += wTf ** 2
-        ret[doc.id] = sqrt(docLen)
+        ret[docId] = sqrt(docLen)
     return ret
 
 
-def makeQuery(query: Query, index: Index, docVecLens: {str: float}) -> {str: float}:
+def makeQuery(queryTokens: [str], index: Index, docVecLens: {str: float}) -> {str: float}:
     docRankMap = {}
     queryVecLen = 0.0
-    for term in set(query.tokens):
+    maxFreq = getMaxFreq(queryTokens)
+    for term in set(queryTokens):
         queryTfIdf = index.getIDF(
-            term) * (list(set(query.tokens)).count(term) / query.maxFreq)
+            term) * (queryTokens.count(term) / maxFreq)
         queryVecLen += queryTfIdf ** 2
         for docId, termFreq in index.get(term):
             toBeAdded = queryTfIdf * termFreq
@@ -62,42 +80,105 @@ def makeQuery(query: Query, index: Index, docVecLens: {str: float}) -> {str: flo
             docRankMap[docId] = toBeAdded
     queryVecLen = sqrt(queryVecLen)
     normalize(docRankMap, docVecLens, queryVecLen)
-    return dict(sorted(docRankMap.items(), key=lambda item: item[1])[: 1000])
+    return dict(sorted(docRankMap.items(), key=lambda item: item[1], reverse=True)[: 1000])
 
 
-def bulkQuery(queries: [Query], index: Index, docVecLens: {str: float}) -> [{str: float}]:
+def getMaxFreq(tokens):
+    return tokens.count(max(set(tokens), key=tokens.count))
+
+
+def bulkQuery(queries: {int: [str]}, index: Index, docVecLens: {str: float}) -> [{str: float}]:
     ret = []
-    for query in queries:
+    for query in queries.values():
         ret.append(makeQuery(query, index, docVecLens))
     return ret
 
 
 def normalize(docRankMap: {str: float}, docVecLens: {str: float}, queryVecLen: float) -> None:
-    for key, value in docRankMap.items():
-        docRankMap[key] = value / (queryVecLen * docVecLens[key])
+    for key in docRankMap:
+        docRankMap[key] /= (queryVecLen * docVecLens[key])
 
 
 def getDocs(path: str) -> [Document]:
-    docs = []
+    docs = {}
     with open(path) as file:
         for line in file:
             line = line.rstrip()
             docId, text = line.split('\t')
-            tokenizedText = tokenizeStr(text)
-            docs.append(Document(docId, tokenizedText))
+            # docs.append(Document(docId, tokenizedText))
+            docs[docId] = preprocStr(text)  # tokenizeStr(text)
     return docs
 
 
+def tokenizeDocs(docsDict: {str: str}) -> {str: [str]}:
+    ret = {}
+    for docId, text in docsDict.items():
+        ret[docId] = tokenizeStr(text)
+    return ret
+
+
+def getDocsPd(path: str):
+    docs = []
+    docIds = []
+    with open(path) as file:
+        for line in file:
+            line = line.rstrip()
+            docId, text = line.split('\t')
+            docs.append(preprocStr(text))
+            docIds.append(docId)
+
+    return pd.DataFrame({"docId": docIds, "text": docs})
+
+
 def getQueries(path: str) -> [Query]:
-    ret = []
+    ret = {}
 
     queryTree = ElementTree.parse(path)
     qNumRe = re.compile("\d{3}")
     for query in queryTree.getroot():
         qNum = int(qNumRe.search(query[0].text).group(0))
         qTokens = tokenizeStr(query[1].text)
-        ret.append(
-            Query(qNum, qTokens))
+        ret[qNum] = query[1].text  # qTokens
+    return ret
+
+
+def tokenizeQueries(queries: {str: str}):
+    ret = {}
+    for qId, text in queries.items():
+        ret[qId] = tokenizeStr(text)
+    return ret
+
+
+def getQueriesPd(path: str):
+    queryIds = []
+    text = []
+
+    queryTree = ElementTree.parse(path)
+    qNumRe = re.compile("\d{3}")
+    for query in queryTree.getroot():
+        queryIds.append(int(qNumRe.search(query[0].text).group(0)))
+        text.append(preprocStr(query[1].text))
+    return pd.DataFrame({"queryId": queryIds, "text": text})
+
+
+def reRank(results, docs, queries):
+   # text = [t for t in queries.values()]  # first 0-48 are query vectors
+    # model = api.load("glove-twitter-200")
+    # print(model.most_similar("cat"))
+    ret = []
+    for query, result in zip(list(queries.values())[:5], results[:5]):
+        text = [query]
+        for docId in result:
+            text.append(docs[docId])
+        vectorizer = Vectorizer()
+        vectorizer.bert(text)
+        # vectorizer.word2vec(
+        #     text)
+        vecsBert = vectorizer.vectors
+        # Recalculate all distances with query vec index[0]
+        ret.append(sorted([spatial.distance.cosine(
+            vecsBert[0], vec) for vec in vecsBert[1:]], reverse=True))
+    print(vecsBert[:5])
     return ret
 
 

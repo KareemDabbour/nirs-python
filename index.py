@@ -8,18 +8,18 @@ class Index:
         self.index = {}
         self.numDocs = 0
 
-    def indexDoc(self, doc: Document) -> None:
-        for uToken in doc.uniqueTokens:
-            tf = doc.tokens.count(uToken)
-            entry = (doc.id, 1 + log(tf) if tf > 0 else 0)
+    def indexDoc(self, docId: str, docText: [str]) -> None:
+        for uToken in set(docText):
+            tf = docText.count(uToken)
+            entry = (docId, 1 + log(tf) if tf > 0 else 0)
             if (not self.index.get(uToken)):
                 self.index[uToken] = []
             self.index[uToken].append(entry)
         self.numDocs += 1
 
-    def bulkIndex(self, docs: [Document]) -> None:
-        for doc in docs:
-            self.indexDoc(doc)
+    def bulkIndex(self, docs: {str: [str]}) -> None:
+        for docId, tokens in docs.items():
+            self.indexDoc(docId, tokens)
 
     def getDocFreq(self, term: str) -> int:
         ret = 0
