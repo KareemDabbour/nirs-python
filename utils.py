@@ -1,10 +1,10 @@
 import re
 import string
+from typing import Dict, List
 from document import Document
 from query import Query
 from index import Index
 import pandas as pd
-# pylint: disable-msg=E0611
 from math import log, sqrt
 import nltk
 from nltk.corpus import stopwords
@@ -35,7 +35,7 @@ stopwords_set = set(stopwords.words("english")).union(
     processStopWords("./resources/StopWords.txt"))
 
 
-def tokenizeStr(docString: str) -> [str]:
+def tokenizeStr(docString: str) -> List[str]:
     #preprocStr(docString).split(" ")
     return [word.strip() for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and word.strip()]
 
@@ -53,7 +53,7 @@ def preprocStr(docString: str) -> str:
     return docString
 
 
-def vectorizeDocs(docs: {str: [str]}) -> {str: float}:
+def vectorizeDocs(docs: Dict[str: List[str]]) -> List[Dict[str: float]]:
     ret = {}
     for docId, tokens in docs.items():
         docLen: float = 0.0
@@ -65,7 +65,7 @@ def vectorizeDocs(docs: {str: [str]}) -> {str: float}:
     return ret
 
 
-def makeQuery(queryTokens: [str], index: Index, docVecLens: {str: float}) -> {str: float}:
+def makeQuery(queryTokens: List[str], index: Index, docVecLens: Dict[str: float]) -> Dict[str: float]:
     docRankMap = {}
     queryVecLen = 0.0
     maxFreq = getMaxFreq(queryTokens)
@@ -87,19 +87,19 @@ def getMaxFreq(tokens):
     return tokens.count(max(set(tokens), key=tokens.count))
 
 
-def bulkQuery(queries: {int: [str]}, index: Index, docVecLens: {str: float}) -> [{str: float}]:
+def bulkQuery(queries: Dict[int: List[str]], index: Index, docVecLens: Dict[str: float]) -> List[Dict[str: float]]:
     ret = []
     for query in queries.values():
         ret.append(makeQuery(query, index, docVecLens))
     return ret
 
 
-def normalize(docRankMap: {str: float}, docVecLens: {str: float}, queryVecLen: float) -> None:
+def normalize(docRankMap: Dict[str: float], docVecLens: Dict[str: float], queryVecLen: float) -> None:
     for key in docRankMap:
         docRankMap[key] /= (queryVecLen * docVecLens[key])
 
 
-def getDocs(path: str) -> [Document]:
+def getDocs(path: str) -> Dict[str: str]:
     docs = {}
     with open(path) as file:
         for line in file:
@@ -110,7 +110,7 @@ def getDocs(path: str) -> [Document]:
     return docs
 
 
-def tokenizeDocs(docsDict: {str: str}) -> {str: [str]}:
+def tokenizeDocs(docsDict: Dict[str: str]) -> Dict[str: List[str]]:
     ret = {}
     for docId, text in docsDict.items():
         ret[docId] = tokenizeStr(text)
@@ -130,7 +130,7 @@ def getDocsPd(path: str):
     return pd.DataFrame({"docId": docIds, "text": docs})
 
 
-def getQueries(path: str) -> [Query]:
+def getQueries(path: str) -> Dict[str: str]:
     ret = {}
 
     queryTree = ElementTree.parse(path)
@@ -142,7 +142,7 @@ def getQueries(path: str) -> [Query]:
     return ret
 
 
-def tokenizeQueries(queries: {str: str}):
+def tokenizeQueries(queries: Dict[str: str]):
     ret = {}
     for qId, text in queries.items():
         ret[qId] = tokenizeStr(text)
@@ -182,7 +182,13 @@ def reRank(results, docs, queries):
     return ret
 
 
-def saveToFile(results: [{str: float}], path: str) -> None:
+def queryExpand(queries):
+    model = api.load("glove-twitter-200")
+    for qNum, qText in queries:
+        pass
+
+
+def saveToFile(results: List[Dict[str: float]], path: str) -> None:
     with open(path, 'w') as f:
         for i, result in enumerate(results):
             for rank, (key, value) in enumerate(result.items()):
