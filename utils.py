@@ -25,14 +25,12 @@ def processStopWords(path):
     ret = []
     with open(path) as f:
         for line in f:
-            ret.append(line)
+            ret.append(line.rstrip())
     return set(ret)
 
 
-stopwords_set = set(stopwords.words("english")).union(
-    processStopWords("./resources/StopWords.txt"))
-
-# stopwords_set = set(processStopWords("./resources/StopWords.txt"))
+stopwords_set = set(stopwords.words("english"))
+# stopwords_set = processStopWords("./resources/StopWords.txt")
 
 
 def tokenizeStr(docString: str) -> List[str]:
@@ -43,7 +41,7 @@ def tokenizeStr(docString: str) -> List[str]:
 def preprocStr(docString: str) -> str:
 
     # making all lower case
-    docString = docString.lower().strip()
+    docString = docString.lower().strip().replace("’", " ").replace("…", " ")
     docString = URL_REGEX.sub('', docString)
     docString = docString \
         .translate(str.maketrans('/', ' ')) \
@@ -182,7 +180,7 @@ def reRank(results, docs, queries):
 
 
 def queryExpand(queries: Dict[str, List[str]]):
-    threshold = 0.635
+    threshold = 0.55
     mult = 1
     start = time.perf_counter()
     print(f"Starting to load model")
