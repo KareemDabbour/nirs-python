@@ -1,8 +1,6 @@
 from utils import *
 from index import Index
 from sklearn.feature_extraction.text import CountVectorizer
-import pandas as pd
-
 
 def main():
     DOC_PATH = "./resources/Trec_microblog11.txt"
