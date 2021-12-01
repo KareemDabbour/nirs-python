@@ -3,22 +3,14 @@ import string
 import time
 from typing import Dict, List
 from index import Index
-import pandas as pd
 from math import log, sqrt
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import TweetTokenizer
-from nltk.stem.snowball import EnglishStemmer
 from xml.etree import ElementTree
-from scipy import spatial
-from sent2vec.vectorizer import Vectorizer
 import gensim.downloader as api
 
-
+GENSIM_MODEL = "glove-twitter-200"
+STOP_WORD_PATH = "../resources/StopWords.txt"
 URL_REGEX = re.compile(
     "((http|https)://)(www.)?[a-zA-Z0-9@:%._\\+~#?&//=]{2,256}\\.[a-z]{2,6}\\b([-a-zA-Z0-9@:%._\\+~#?&//=]*)")
-nltk.download('stopwords')
-tknzr = TweetTokenizer()
 
 
 def processStopWords(path):
@@ -29,24 +21,19 @@ def processStopWords(path):
     return set(ret)
 
 
-stopwords_set = set(stopwords.words("english"))
-# stopwords_set = processStopWords("./resources/StopWords.txt")
+stopwords_set = processStopWords(STOP_WORD_PATH)
 
 
 def tokenizeStr(docString: str) -> List[str]:
-    #preprocStr(docString).split(" ")
-    return [word for word in tknzr.tokenize(preprocStr(docString)) if word not in stopwords_set and word.strip()]
+    return [word for word in preprocStr(docString).split(' ') if word not in stopwords_set and word.strip()]
 
 
 def preprocStr(docString: str) -> str:
-
-    # making all lower case
-    docString = docString.lower().strip().replace("’", " ").replace("…", " ")
+    docString = docString.lower().strip().replace(
+        "’", " ").replace("…", " ").replace("“", ' ')
     docString = URL_REGEX.sub('', docString)
-    docString = docString \
-        .translate(str.maketrans('/', ' ')) \
-        .translate(str.maketrans(' ', ' ', string.punctuation)) \
-        .translate(str.maketrans('', '', string.digits))
+    docString = docString\
+        .translate(str.maketrans(string.punctuation, ' '*len(string.punctuation), string.digits))
     return docString
 
 
@@ -102,8 +89,7 @@ def getDocs(path: str) -> Dict[str, str]:
         for line in file:
             line = line.rstrip()
             docId, text = line.split('\t')
-            # docs.append(Document(docId, tokenizedText))
-            docs[docId] = preprocStr(text)  # tokenizeStr(text)
+            docs[docId] = preprocStr(text)
     return docs
 
 
@@ -114,19 +100,6 @@ def tokenizeDocs(docsDict: Dict[str, str]) -> Dict[str, List[str]]:
     return ret
 
 
-def getDocsPd(path: str):
-    docs = []
-    docIds = []
-    with open(path) as file:
-        for line in file:
-            line = line.rstrip()
-            docId, text = line.split('\t')
-            docs.append(preprocStr(text))
-            docIds.append(docId)
-
-    return pd.DataFrame({"docId": docIds, "text": docs})
-
-
 def getQueries(path: str) -> Dict[str, str]:
     ret = {}
 
@@ -134,8 +107,7 @@ def getQueries(path: str) -> Dict[str, str]:
     qNumRe = re.compile("\d{3}")
     for query in queryTree.getroot():
         qNum = int(qNumRe.search(query[0].text).group(0))
-        qTokens = tokenizeStr(query[1].text)
-        ret[qNum] = query[1].text  # qTokens
+        ret[qNum] = query[1].text
     return ret
 
 
@@ -146,59 +118,21 @@ def tokenizeQueries(queries: Dict[str, str]):
     return ret
 
 
-def getQueriesPd(path: str):
-    queryIds = []
-    text = []
-
-    queryTree = ElementTree.parse(path)
-    qNumRe = re.compile("\d{3}")
-    for query in queryTree.getroot():
-        queryIds.append(int(qNumRe.search(query[0].text).group(0)))
-        text.append(preprocStr(query[1].text))
-    return pd.DataFrame({"queryId": queryIds, "text": text})
-
-
-def reRank(results, docs, queries):
-   # text = [t for t in queries.values()]  # first 0-48 are query vectors
-    # model = api.load("glove-twitter-200")
-    # print(model.most_similar("cat"))
-    ret = []
-    for query, result in zip(list(queries.values())[:5], results[:5]):
-        text = [query]
-        for docId in result:
-            text.append(docs[docId])
-        vectorizer = Vectorizer()
-        vectorizer.bert(text)
-        # vectorizer.word2vec(
-        #     text)
-        vecsBert = vectorizer.vectors
-        # Recalculate all distances with query vec index[0]
-        ret.append(sorted([spatial.distance.cosine(
-            vecsBert[0], vec) for vec in vecsBert[1:]], reverse=True))
-    print(vecsBert[:5])
-    return ret
-
-
 def queryExpand(queries: Dict[str, List[str]]):
     threshold = 0.55
     mult = 1
     start = time.perf_counter()
     print(f"Starting to load model")
-    model = api.load("glove-twitter-200")
-    print(type(model))
-    print(f"Time to load model: {time.perf_counter() - start}")
-    for qText in list(queries.values()):  # [:3]:
+    model = api.load(GENSIM_MODEL)
+    print(f"Loaded model. Took: {time.perf_counter() - start} seconds")
+    for qText in list(queries.values()):
         sim = []
-
         for text in set(qText):
-            # print(f"Similar words to {text}: {model.most_similar(text)}")
             if not model.has_index_for(text):
                 continue
-
             simList = [word for (word, val) in model.most_similar(
                 text, topn=mult) if val > threshold]
             sim.extend(tokenizeStr(" ".join(simList)))
-
         qText.extend(sim)
 
 
