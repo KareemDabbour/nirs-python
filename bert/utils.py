@@ -85,12 +85,16 @@ def normalize(docRankMap: Dict[str, float], docVecLens: Dict[str, float], queryV
 
 def getDocs(path: str) -> Dict[str, str]:
     docs = {}
+    bof = True
     with open(path) as file:
         for line in file:
             line = line.rstrip()
+            if bof:
+                line = line.replace("\uFEFF", "")
+                bof = False
             docId, text = line.split('\t')
-            # docs.append(Document(docId, tokenizedText))
-            docs[docId] = preprocStr(text)  # tokenizeStr(text)
+            docs[docId] = preprocStr(text)
+
     return docs
 
 
@@ -108,7 +112,7 @@ def getQueries(path: str) -> Dict[str, str]:
     qNumRe = re.compile("\d{3}")
     for query in queryTree.getroot():
         qNum = int(qNumRe.search(query[0].text).group(0))
-        ret[qNum] = query[1].text
+        ret[qNum] = preprocStr(query[1].text)
     return ret
 
 
@@ -119,7 +123,7 @@ def tokenizeQueries(queries: Dict[str, str]):
     return ret
 
 
-def reRank(results, docs, queries):
+def reRank(results: List[Dict[str, float]], docs: Dict[str, str], queries: Dict[str, str]) -> List[Dict[str, float]]:
     ret = []
     # index 0-48 are query vectors
     text = [query for query in queries.values()]
@@ -131,17 +135,20 @@ def reRank(results, docs, queries):
     # training the model.
     vectorizer = Vectorizer()
     vectorizer.bert(text)
-    vecsBert = vectorizer.vectors
+    vecsBert = [[x if x > 0 else 0 for x in vector]
+                for vector in vectorizer.vectors]  # remove all the negative vectors
     offset = 48
 
     # There are 49 results (one for each query) therefore we can use it to index
     for queryNum, result in enumerate(results):
+        # Make a dict with docId and associated bert vector
         vecsDict = dict(
             zip(result.keys(), vecsBert[offset:len(result.values()) + offset]))
+        # Offset is needed to account for the 49 query vectors
         offset += len(result.values())
         # Recalculate all distances with associated query vec
-        ret.append(dict(sorted([(dId, spatial.distance.cosine(
-            vecsBert[queryNum], vec)) for dId, vec in vecsDict.items()], key=lambda item: item[1], reverse=True)))
+        ret.append(dict(sorted([(docId, spatial.distance.cosine(
+            vecsBert[queryNum], vec)) for docId, vec in vecsDict.items()], key=lambda item: item[1], reverse=True)))
     return ret
 
 

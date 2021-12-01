@@ -82,11 +82,16 @@ def normalize(docRankMap: Dict[str, float], docVecLens: Dict[str, float], queryV
 
 def getDocs(path: str) -> Dict[str, str]:
     docs = {}
+    bof = True
     with open(path) as file:
         for line in file:
             line = line.rstrip()
+            if bof:
+                line = line.replace("\uFEFF", "")
+                bof = False
             docId, text = line.split('\t')
             docs[docId] = preprocStr(text)
+
     return docs
 
 

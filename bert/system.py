@@ -13,17 +13,13 @@ def main():
     regDocs = getDocs(DOC_PATH)
     docs = tokenizeDocs(regDocs)
 
-    for (docId, doc), orDoc in zip(list(docs.items())[:5], list(regDocs.values())[:5]):
-        print(f"DocId: {docId}\nOriginal Doc: {orDoc} \nTokens: {doc}")
     index.bulkIndex(docs)
 
-    # print(list(index.index.keys())[:100])
     docVecLens = vectorizeDocs(docs)
 
     regQueries = getQueries(QUERY_PATH)
 
     queries = tokenizeQueries(regQueries)
-    # queryExpand(queries)
 
     results = bulkQuery(queries, index, docVecLens)
 

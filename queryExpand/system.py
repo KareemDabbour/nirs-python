@@ -9,7 +9,7 @@ def main():
 
     start = time.perf_counter()
 
-    print("Starting")
+    print("Starting ...")
     index = Index()
     regDocs = getDocs(DOC_PATH)
     docs = tokenizeDocs(regDocs)
@@ -24,13 +24,19 @@ def main():
 
     queries = tokenizeQueries(regQueries)
 
+    print("Starting to expand queries ...")
     queryExpand(queries)
 
     print(
-        f"Finished expanding queries. Took {time.perf_counter() - start} seconds.")
-    results = bulkQuery(queries, index, docVecLens)
+        f"Done! Took {time.perf_counter() - start} seconds.")
 
+    print(f"Running {len(queries.keys())} queries ...")
+    results = bulkQuery(queries, index, docVecLens)
+    print(f"Done!")
+
+    print(f"Saving to file {RESULT_PATH} ...")
     saveToFile(results, RESULT_PATH)
+    print(f"Done!")
 
     print(f"Time to complete: {time.perf_counter() - start}")
 

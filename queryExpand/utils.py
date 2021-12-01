@@ -85,11 +85,16 @@ def normalize(docRankMap: Dict[str, float], docVecLens: Dict[str, float], queryV
 
 def getDocs(path: str) -> Dict[str, str]:
     docs = {}
+    bof = True
     with open(path) as file:
         for line in file:
             line = line.rstrip()
+            if bof:
+                line = line.replace("\uFEFF", "")
+                bof = False
             docId, text = line.split('\t')
             docs[docId] = preprocStr(text)
+
     return docs
 
 
@@ -121,10 +126,7 @@ def tokenizeQueries(queries: Dict[str, str]):
 def queryExpand(queries: Dict[str, List[str]]):
     threshold = 0.55
     mult = 1
-    start = time.perf_counter()
-    print(f"Starting to load model")
     model = api.load(GENSIM_MODEL)
-    print(f"Loaded model. Took: {time.perf_counter() - start} seconds")
     for qText in list(queries.values()):
         sim = []
         for text in set(qText):
